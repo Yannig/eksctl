@@ -59,14 +59,20 @@ type Template struct {
 					Resource interface{}
 				}
 			}
-			BlockDeviceMappings      []interface{}
-			VPCZoneIdentifier        interface{}
-			AssociatePublicIpAddress bool
-			CidrIp                   string
-			CidrIpv6                 string
-			IpProtocol               string
-			FromPort                 int
-			ToPort                   int
+			LaunchTemplateData struct {
+				UserData            string
+				BlockDeviceMappings []interface{}
+				NetworkInterfaces   []struct {
+					AssociatePublicIpAddress bool
+				}
+			}
+			VPCZoneIdentifier interface{}
+
+			CidrIp     string
+			CidrIpv6   string
+			IpProtocol string
+			FromPort   int
+			ToPort     int
 		}
 	}
 }
@@ -672,9 +678,9 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should have correct policies", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			Expect(obj.Resources).To(HaveKey("NodeLaunchConfig"))
-			Expect(obj.Resources["NodeLaunchConfig"].Properties.BlockDeviceMappings).To(HaveLen(0))
+			Expect(obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData.BlockDeviceMappings).To(HaveLen(0))
 
 			Expect(obj.Resources).To(HaveKey("PolicyEBS"))
 			Expect(obj.Resources["PolicyEBS"].Properties.PolicyDocument.Statement).To(HaveLen(1))
@@ -714,9 +720,9 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should have correct policies", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			Expect(obj.Resources).To(HaveKey("NodeLaunchConfig"))
-			Expect(obj.Resources["NodeLaunchConfig"].Properties.BlockDeviceMappings).To(HaveLen(0))
+			Expect(obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData.BlockDeviceMappings).To(HaveLen(0))
 
 			Expect(obj.Resources).To(HaveKey("PolicyFSX"))
 			Expect(obj.Resources["PolicyFSX"].Properties.PolicyDocument.Statement).To(HaveLen(1))
@@ -745,9 +751,9 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should have correct policies", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			Expect(obj.Resources).To(HaveKey("NodeLaunchConfig"))
-			Expect(obj.Resources["NodeLaunchConfig"].Properties.BlockDeviceMappings).To(HaveLen(0))
+			Expect(obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData.BlockDeviceMappings).To(HaveLen(0))
 
 			Expect(obj.Resources).To(HaveKey("PolicyEFS"))
 			Expect(obj.Resources["PolicyEFS"].Properties.PolicyDocument.Statement).To(HaveLen(1))
@@ -787,6 +793,8 @@ var _ = Describe("CloudFormation template builder API", func() {
 		It("should have correct resources and attributes", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
 
+			Expect(obj.Resources).To(HaveKey("NodeGroup"))
+
 			Expect(obj.Resources["NodeGroup"].Properties.VPCZoneIdentifier).ToNot(BeNil())
 			x, ok := obj.Resources["NodeGroup"].Properties.VPCZoneIdentifier.(map[string]interface{})
 			Expect(ok).To(BeTrue())
@@ -800,19 +808,21 @@ var _ = Describe("CloudFormation template builder API", func() {
 				},
 			}
 			Expect(x).To(Equal(refSubnets))
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			Expect(obj.Resources).To(HaveKey("NodeLaunchConfig"))
+			ltd := obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData
 
-			Expect(obj.Resources["NodeLaunchConfig"].Properties.BlockDeviceMappings).To(HaveLen(1))
+			Expect(ltd.BlockDeviceMappings).To(HaveLen(1))
 
-			rootVolume := obj.Resources["NodeLaunchConfig"].Properties.BlockDeviceMappings[0].(map[string]interface{})
+			rootVolume := ltd.BlockDeviceMappings[0].(map[string]interface{})
 
 			Expect(rootVolume).To(HaveKeyWithValue("DeviceName", "/dev/xvda"))
 			Expect(rootVolume).To(HaveKey("Ebs"))
 			Expect(rootVolume["Ebs"].(map[string]interface{})).To(HaveKeyWithValue("VolumeType", "io1"))
 			Expect(rootVolume["Ebs"].(map[string]interface{})).To(HaveKeyWithValue("VolumeSize", 2.0))
 
-			Expect(obj.Resources["NodeLaunchConfig"].Properties.AssociatePublicIpAddress).To(BeFalse())
+			Expect(ltd.NetworkInterfaces).To(HaveLen(1))
+			Expect(ltd.NetworkInterfaces[0].AssociatePublicIpAddress).To(BeFalse())
 
 			Expect(obj.Resources["SSHIPv4"].Properties.CidrIp).To(Equal("192.168.0.0/16"))
 			Expect(obj.Resources["SSHIPv4"].Properties.FromPort).To(Equal(22))
@@ -844,6 +854,7 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should have correct resources and attributes", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroup"))
 
 			Expect(obj.Resources["NodeGroup"].Properties.VPCZoneIdentifier).ToNot(BeNil())
 			x, ok := obj.Resources["NodeGroup"].Properties.VPCZoneIdentifier.(map[string]interface{})
@@ -859,7 +870,12 @@ var _ = Describe("CloudFormation template builder API", func() {
 			}
 			Expect(x).To(Equal(refSubnets))
 
-			Expect(obj.Resources["NodeLaunchConfig"].Properties.AssociatePublicIpAddress).To(BeTrue())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
+
+			ltd := obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData
+
+			Expect(ltd.NetworkInterfaces).To(HaveLen(1))
+			Expect(ltd.NetworkInterfaces[0].AssociatePublicIpAddress).To(BeTrue())
 
 			Expect(obj.Resources["SSHIPv4"].Properties.CidrIp).To(Equal("0.0.0.0/0"))
 			Expect(obj.Resources["SSHIPv4"].Properties.FromPort).To(Equal(22))
@@ -936,7 +952,12 @@ var _ = Describe("CloudFormation template builder API", func() {
 			}
 			Expect(x).To((Equal(refSubnets)))
 
-			Expect(obj.Resources["NodeLaunchConfig"].Properties.AssociatePublicIpAddress).To(BeTrue())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
+
+			ltd := obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData
+
+			Expect(ltd.NetworkInterfaces).To(HaveLen(1))
+			Expect(ltd.NetworkInterfaces[0].AssociatePublicIpAddress).To(BeTrue())
 
 			Expect(obj.Resources).ToNot(HaveKey("SSHIPv4"))
 
@@ -988,8 +1009,9 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should extract valid cloud-config using our implementation", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			userData := obj.Resources["NodeLaunchConfig"].Properties.UserData
+			userData := obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData.UserData
 			Expect(userData).ToNot(BeEmpty())
 
 			cc, err = cloudconfig.DecodeCloudConfig(userData)
@@ -1058,8 +1080,9 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should extract valid cloud-config using our implementation", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			userData := obj.Resources["NodeLaunchConfig"].Properties.UserData
+			userData := obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData.UserData
 			Expect(userData).ToNot(BeEmpty())
 
 			cc, err = cloudconfig.DecodeCloudConfig(userData)
@@ -1127,8 +1150,9 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should extract valid cloud-config using our implementation", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			userData := obj.Resources["NodeLaunchConfig"].Properties.UserData
+			userData := obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData.UserData
 			Expect(userData).ToNot(BeEmpty())
 
 			cc, err = cloudconfig.DecodeCloudConfig(userData)
@@ -1194,8 +1218,9 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should parse JSON without errors and extract valid cloud-config using our implementation", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			userData := obj.Resources["NodeLaunchConfig"].Properties.UserData
+			userData := obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData.UserData
 			Expect(userData).ToNot(BeEmpty())
 
 			cc, err = cloudconfig.DecodeCloudConfig(userData)
@@ -1262,8 +1287,9 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should extract valid cloud-config using our implementation", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			userData := obj.Resources["NodeLaunchConfig"].Properties.UserData
+			userData := obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData.UserData
 			Expect(userData).ToNot(BeEmpty())
 
 			cc, err = cloudconfig.DecodeCloudConfig(userData)
@@ -1322,8 +1348,9 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should extract valid cloud-config using our implementation", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			userData := obj.Resources["NodeLaunchConfig"].Properties.UserData
+			userData := obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData.UserData
 			Expect(userData).ToNot(BeEmpty())
 
 			cc, err = cloudconfig.DecodeCloudConfig(userData)
@@ -1396,8 +1423,9 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should extract valid cloud-config using our implementation", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			userData := obj.Resources["NodeLaunchConfig"].Properties.UserData
+			userData := obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData.UserData
 			Expect(userData).ToNot(BeEmpty())
 
 			cc, err = cloudconfig.DecodeCloudConfig(userData)
@@ -1468,8 +1496,9 @@ var _ = Describe("CloudFormation template builder API", func() {
 
 		It("should extract valid cloud-config using our implementation", func() {
 			Expect(obj.Resources).ToNot(BeEmpty())
+			Expect(obj.Resources).To(HaveKey("NodeGroupLaunchTemplate"))
 
-			userData := obj.Resources["NodeLaunchConfig"].Properties.UserData
+			userData := obj.Resources["NodeGroupLaunchTemplate"].Properties.LaunchTemplateData.UserData
 			Expect(userData).ToNot(BeEmpty())
 
 			cc, err = cloudconfig.DecodeCloudConfig(userData)
